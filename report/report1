@@ -1,0 +1,91 @@
+报告1：文件操作脚本语言定义与编译器结构设计
+一、文件操作脚本语言的EBNF描述
+1. 词法规则（EBNF）
+letter          = 'a' | 'b' | ... | 'z' | 'A' | 'B' | ... | 'Z' ;
+digit           = '0' | '1' | ... | '9' ;
+identifier      = letter , { letter | digit | '_' } ;
+string_literal  = '"' , { any_char_except_quote } , '"' ;
+integer_literal = digit , { digit } ;
+path            = string_literal ;
+whitespace      = { ' ' | '\t' | '\n' | '\r' } ;
+keyword         = "read" | "write" | "cd" | "ls" | "mkdir" | "rmdir" |
+                  "rename" | "copy" | "move" | "delete" | "chmod" |
+                  "try" | "catch" | "end" | "help" ;
+symbol          = '=' | ';' | ',' | '(' | ')' ;
+
+2. 语法规则（EBNF）
+program         = { statement } ;
+
+statement       = file_op_stmt | dir_op_stmt | exception_stmt | help_stmt ;
+
+file_op_stmt    = "read" path ';'
+                | "write" path ',' string_literal ';'
+                | "copy" path ',' path ';'
+                | "move" path ',' path ';'
+                | "delete" path ';' ;
+
+dir_op_stmt     = "cd" path ';'
+                | "ls" [ path ] ';'
+                | "mkdir" path ';'
+                | "rmdir" path ';'
+                | "rename" path ',' path ';'
+                | "chmod" path ',' integer_literal ';' ;
+
+exception_stmt  = "try" '{' { statement } '}' "catch" '{' { statement } '}' "end" ;
+
+help_stmt       = "help" ';' ;
+
+二、语义规则（非形式化描述）
+1.	文件读写操作：
+read "path";：尝试读取文件，若文件不存在，抛出“文件不存在”异常。
+write "path", "data";：向文件写入数据，如目标路径无权限，抛出“权限错误”。
+2.	目录操作：
+cd "dir";：切换工作目录，若目标不是目录或不存在，抛出异常。
+ls; 或 ls "dir";：列出当前或指定目录内容。
+mkdir, rmdir, rename 等涉及路径合法性和权限检测。
+3.	异常处理：
+try { ... } catch { ... } end;：对可能出错的操作进行包装，当try中出现错误，自动跳转到catch部分继续执行，支持嵌套。
+4.	权限管理：
+chmod "path", mode;：更改权限（mode为整数，如777、755 等），权限非法或无权限更改时应报错。
+5.	帮助系统：
+help;：输出所有命令格式及说明。
+6.	语法错误与语义错误：
+编译器需能明确区分语法结构问题（如缺分号）与语义逻辑问题（如非法路径），并输出对应提示信息。
+
+三、文件操作语言源程序示例
+1. 正确的源程序示例
+mkdir "project";
+cd "project";
+write "log.txt", "Start logging";
+read "log.txt";
+copy "log.txt", "backup.txt";
+try {
+    delete "config.txt";
+} catch {
+    write "log.txt", "config.txt missing";
+} end;
+help;
+
+2. 错误的源程序示例
+（1）语法错误：缺少分号
+mkdir "project"
+cd "project";
+→ 报错：语法错误，缺少分号
+（2）语义错误：非法权限值
+chmod "secret.txt", 999;
+→ 报错：权限值非法，应在0-777之间
+（3）逻辑错误：删除当前目录（非法操作）
+rmdir ".";
+→ 报错：无法删除当前工作目录
+
+四、编译器总体结构设计与接口定义
+1. 编译器模块结构图
+ 
+2. 主要接口定义（伪代码/描述）
+•	Token getNextToken()：返回下一个词法单元。
+•	bool parseProgram()：主语法分析函数，递归进入各子语法。
+•	void checkSemantics()：在语法树上执行静态语义检查，如路径格式、权限合法性。
+•	Result executeStatement(Statement stmt)：解释执行语句，用于语义阶段模拟运行。
+•	FileSystem fs：虚拟文件系统对象，支持路径管理、权限判断、异常抛出。
+•	ErrorHandler.report(errorType, message)：用于统一报告词法/语法/语义错误。
+
