@@ -1,0 +1,277 @@
+语法分析实现（递归下降 + YACC）
+一、主要数据结构（Data Structures）
+在本编译器的语法分析过程中，分别针对手工递归下降实现和自动工具 YACC 实现，设计了不同但协同的核心数据结构：
+1. Token 类型（通用）
+该类型用于描述词法分析阶段生成的词法单元，包含词素内容、类别和位置信息。
+typedef enum {
+    T_KEYWORD,     // 保留字：read, write 等
+    T_STRING,      // 字符串："filename.txt"
+    T_NUMBER,      // 权限数字：如 "755"
+    T_EOF          // 文件结束
+} TokenType;
+
+typedef struct {
+    TokenType type;
+    char lexeme[256];  // 原始文本
+    int line, column;  // 位置信息，用于错误报告
+} Token;
+2. Parser 类型（手工递归下降中使用）
+该结构体是语法分析器的状态持有器，包含当前token及获取下一个token的接口函数。
+typedef struct {
+    Token current_token;
+    Token (*get_next_token)();  // 指向词法分析函数
+} Parser;
+3. YACC使用BNF +动作语义规则
+在使用 YACC 的方式中，无需手工定义 Token 结构，而是通过 %token声明符 + flex 词法配合自动传入 yylval（可选）。
+YACC 自动将语言文法规则编译成一个 LALR(1) 语法分析器，同时结合语义动作 {} 实现语义层触发。
+%token READ WRITE CD STRING ...
+%%
+command: READ STRING { printf("Read: %s\n", $2); };
+
+二、递归下降语法分析伪代码（详细说明）
+递归下降法是一种自顶向下的语法分析方法，其核心思想是：每个非终结符都由一个函数负责解析，并递归地调用其他非终结符对应的函数。
+以下是详细的伪代码流程：
+1. 总控程序（程序主入口）
+procedure parse_program(parser)
+    while parser.current_token ≠ EOF do
+        call parse_command(parser)
+此函数代表整个程序由若干 command 构成的串行语句流。每一条语句都由 parse_command 识别。
+
+2. 命令语句识别函数
+procedure parse_command(parser)
+    switch parser.current_token.lexeme:
+        case "read":
+            match(parser, "read")
+            match(parser, STRING)
+        case "write":
+            match(parser, "write")
+            match(parser, STRING)
+        case "cd":
+            match(parser, "cd")
+            match(parser, STRING)
+        case "mkdir":
+            match(parser, "mkdir")
+            match(parser, STRING)
+        case "rm":
+            match(parser, "rm")
+            match(parser, STRING)
+        case "cp":
+            match(parser, "cp")
+            match(parser, STRING)
+            match(parser, STRING)
+        case "mv":
+            match(parser, "mv")
+            match(parser, STRING)
+            match(parser, STRING)
+        case "chmod":
+            match(parser, "chmod")
+            match(parser, STRING)   // 权限
+            match(parser, STRING)   // 文件
+        case "help":
+            match(parser, "help")
+        else:
+            报错并退出
+
+3. match 函数（终结符匹配器）
+该函数用于检查当前 token 是否符合期望，如符合则取下一个 token，否则报错。
+procedure match(parser, expected_value_or_type)
+    if parser.current_token ≠ expected_value_or_type:
+        报错（当前词法单元与预期不符）
+    parser.current_token ← parser.get_next_token()
+
+三、YACC 语法分析器说明（对比）
+使用 YACC 工具时，通过 .y 文件声明文法规则 + 动作代码：
+command:
+    READ STRING           { printf("Read %s\n", $2); }
+  | WRITE STRING          { printf("Write %s\n", $2); }
+  | CD STRING             { printf("Change dir %s\n", $2); }
+  | ...
+无需显式编写 match() 或 switch-case 分支，而是由状态转换表自动控制分析流程。
+词法单元由 LEX 提供：
+\"[^\"]+\"   { yylval = strdup(yytext); return STRING; }
+两者结合后形成完整的编译器前端。
+
+四、样例分析输入（对比说明）
+正确输入样例
+read "file.txt"
+cd "project"
+chmod "755" "script.sh"
+help
+
+错误输入样例
+read      // 缺少参数
+cp "a.txt"     // 缺少目标文件
+chmod 755      // 权限未加引号
+xyz "abc"      // 非法命令
+
+
+1.手工实现语法分析器（递归下降法，C语言）
+数据结构
+typedef enum {
+    NT_PROGRAM,
+    NT_COMMAND,
+    NT_READ,
+    NT_WRITE,
+    NT_CD,
+    NT_MKDIR,
+    NT_RM,
+    NT_CP,
+    NT_MV,
+    NT_CHMOD,
+    NT_HELP
+} NonTerminal;
+
+typedef struct {
+    Token current_token;
+    // 词法分析器接口
+    Token (*get_next_token)();
+} Parser;
+
+函数声明
+void parse_program(Parser* parser);
+void parse_command(Parser* parser);
+void match(Parser* parser, TokenType expected_type, const char* expected_lexeme);
+
+解析流程主函数
+void parse_program(Parser* parser) {
+    while (parser->current_token.type != T_EOF) {
+        parse_command(parser);
+    }
+}	
+
+command 解析函数（主分发）
+void parse_command(Parser* parser) {
+    if (strcmp(parser->current_token.lexeme, "read") == 0) {
+        match(parser, T_KEYWORD, "read");
+        match(parser, T_STRING, NULL);
+    } else if (strcmp(parser->current_token.lexeme, "write") == 0) {
+        match(parser, T_KEYWORD, "write");
+        match(parser, T_STRING, NULL);
+    } else if (strcmp(parser->current_token.lexeme, "cd") == 0) {
+        match(parser, T_KEYWORD, "cd");
+        match(parser, T_STRING, NULL);
+    } else if (strcmp(parser->current_token.lexeme, "mkdir") == 0) {
+        match(parser, T_KEYWORD, "mkdir");
+        match(parser, T_STRING, NULL);
+    } else if (strcmp(parser->current_token.lexeme, "rm") == 0) {
+        match(parser, T_KEYWORD, "rm");
+        match(parser, T_STRING, NULL);
+    } else if (strcmp(parser->current_token.lexeme, "cp") == 0) {
+        match(parser, T_KEYWORD, "cp");
+        match(parser, T_STRING, NULL);
+        match(parser, T_STRING, NULL);
+    } else if (strcmp(parser->current_token.lexeme, "mv") == 0) {
+        match(parser, T_KEYWORD, "mv");
+        match(parser, T_STRING, NULL);
+        match(parser, T_STRING, NULL);
+    } else if (strcmp(parser->current_token.lexeme, "chmod") == 0) {
+        match(parser, T_KEYWORD, "chmod");
+        match(parser, T_STRING, NULL);
+        match(parser, T_STRING, NULL);
+    } else if (strcmp(parser->current_token.lexeme, "help") == 0) {
+        match(parser, T_KEYWORD, "help");
+    } else {
+        fprintf(stderr, "Syntax error at line %d: unknown command '%s'\n",
+                parser->current_token.line, parser->current_token.lexeme);
+        exit(1);
+    }
+}
+
+match 函数
+void match(Parser* parser, TokenType expected_type, const char* expected_lexeme) {
+    if (parser->current_token.type != expected_type) {
+        fprintf(stderr, "Syntax error: expected type %d, got %d\n",
+                expected_type, parser->current_token.type);
+        exit(1);
+    }
+    if (expected_lexeme != NULL &&
+        strcmp(parser->current_token.lexeme, expected_lexeme) != 0) {
+        fprintf(stderr, "Syntax error: expected '%s', got '%s'\n",
+                expected_lexeme, parser->current_token.lexeme);
+        exit(1);
+    }
+
+    parser->current_token = parser->get_next_token();
+}
+示例输入（test.txt）
+read "file1.txt"
+write "output.txt"
+cd "dir"
+mkdir "newdir"
+rm "tmp.txt"
+cp "a.txt" "b.txt"
+mv "a.txt" "b.txt"
+chmod "755" "file"
+help
+
+2.使用 YACC 构建语法分析器
+文件结构
+yacc_parser/
+├── parser.y
+├── lexer.l
+├── token.h
+├── test.txt
+
+parser.y：YACC 文件
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%token READ WRITE CD MKDIR RM CP MV CHMOD HELP STRING
+
+%%
+program:
+    | program command
+    ;
+
+command:
+      READ STRING           { printf("Read command\n"); }
+    | WRITE STRING          { printf("Write command\n"); }
+    | CD STRING             { printf("Change directory\n"); }
+    | MKDIR STRING          { printf("Make directory\n"); }
+    | RM STRING             { printf("Remove file\n"); }
+    | CP STRING STRING      { printf("Copy file\n"); }
+    | MV STRING STRING      { printf("Move file\n"); }
+    | CHMOD STRING STRING   { printf("Change permissions\n"); }
+    | HELP                  { printf("Help\n"); }
+    ;
+%%
+
+int main() {
+    return yyparse();
+}
+
+int yyerror(char* s) {
+    fprintf(stderr, "Syntax Error: %s\n", s);
+    return 0;
+}
+
+lexer.l：对应词法文件（匹配 yacc）
+%{
+#include "y.tab.h"
+%}
+
+%%
+"read"     { return READ; }
+"write"    { return WRITE; }
+"cd"       { return CD; }
+"mkdir"    { return MKDIR; }
+"rm"       { return RM; }
+"cp"       { return CP; }
+"mv"       { return MV; }
+"chmod"    { return CHMOD; }
+"help"     { return HELP; }
+\"[^\"]+\" { yylval = strdup(yytext); return STRING; }
+[ \t\r\n]+ ;
+.          { return yytext[0]; }
+%%
+
+编译命令
+bison -d parser.y
+flex lexer.l
+gcc parser.tab.c lex.yy.c -o parser -lfl
+./parser < test.txt
+
+
+
