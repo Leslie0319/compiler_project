@@ -1,1 +1,85 @@
+✅valid_script.txt
+# 测试1：基本文件读写
+create_file("/tmp/test.txt");
+write_file("/tmp/test.txt", "Hello, World!");
+read_file("/tmp/test.txt");
 
+# 测试2：目录操作
+create_dir("/tmp/mydir");
+change_dir("/tmp/mydir");
+print_working_dir();
+rename_file("/tmp/test.txt", "/tmp/renamed.txt");
+copy_file("/tmp/renamed.txt", "/tmp/mydir/copy.txt");
+
+# 测试3：删除文件与目录
+delete_file("/tmp/renamed.txt");
+delete_file("/tmp/mydir/copy.txt");
+change_dir("/tmp");
+delete_dir("/tmp/mydir");
+
+# 测试4：多文件并行操作
+create_file("/tmp/f1.txt");
+create_file("/tmp/f2.txt");
+write_file("/tmp/f1.txt", "File One");
+write_file("/tmp/f2.txt", "File Two");
+copy_file("/tmp/f1.txt", "/tmp/f3.txt");
+move_file("/tmp/f3.txt", "/tmp/f4.txt");
+read_file("/tmp/f4.txt");
+
+# 测试5：权限与异常处理测试（应不会报错）
+check_permission("/tmp/f1.txt");
+try {
+    read_file("/tmp/unknown.txt");
+} catch (FileNotFoundError) {
+    print("File does not exist!");
+}
+
+# 测试6：嵌套目录
+create_dir("/tmp/nested/a/b/c");
+write_file("/tmp/nested/a/b/c/file.txt", "Nested file.");
+read_file("/tmp/nested/a/b/c/file.txt");
+
+# 测试7：帮助命令
+help();
+
+
+❌invalid_script.txt
+# 错误1：语法错误（缺少分号）
+create_file("/tmp/a.txt")
+
+# 错误2：未闭合的字符串
+write_file("/tmp/a.txt", "Hello World);
+
+# 错误3：非法函数名
+make_file("/tmp/a.txt");
+
+# 错误4：参数数量不符
+read_file();
+
+# 错误5：缺少括号
+delete_file "/tmp/a.txt";
+
+# 错误6：无效路径
+create_file(/tmp/a.txt);
+
+# 错误7：错误嵌套语法
+try {
+    try {
+        delete_file("/notfound.txt");
+    }
+catch (FileNotFoundError) {
+    print("Nested error.");
+}
+
+# 错误8：非法标识符
+123write("/tmp/file.txt", "bad");
+
+# 错误9：缺少 catch 体
+try {
+    read_file("/a.txt");
+} catch (FileNotFoundError);
+
+# 错误10：空语句/不完整命令
+;
+write_file;
+help
