@@ -1,0 +1,76 @@
+%{
+#include "y.tab.h"  // 包含 YACC 中定义的 token 类型
+#include <string.h>
+
+// 保留关键字表
+char *keywords[] = {
+    "open", "read", "write",
+    "cd", "ls", "mkdir", "rmdir",
+    "copy", "move", "delete",
+    "if", "then", "help",
+    NULL
+};
+
+// 将关键字字符串转换为 YACC token 类型
+int check_keyword(const char *lexeme) {
+    if (strcmp(lexeme, "open") == 0) return OPEN;
+    if (strcmp(lexeme, "read") == 0) return READ;
+    if (strcmp(lexeme, "write") == 0) return WRITE;
+    if (strcmp(lexeme, "cd") == 0) return CD;
+    if (strcmp(lexeme, "ls") == 0) return LS;
+    if (strcmp(lexeme, "mkdir") == 0) return MKDIR;
+    if (strcmp(lexeme, "rmdir") == 0) return RMDIR;
+    if (strcmp(lexeme, "copy") == 0) return COPY;
+    if (strcmp(lexeme, "move") == 0) return MOVE;
+    if (strcmp(lexeme, "delete") == 0) return DELETE;
+    if (strcmp(lexeme, "if") == 0) return IF;
+    if (strcmp(lexeme, "then") == 0) return THEN;
+    if (strcmp(lexeme, "help") == 0) return HELP;
+    return 0;
+}
+%}
+
+%option noyywrap
+
+// 定义正则表达式模式
+ID      [a-zA-Z_][a-zA-Z0-9_./]*
+STRING  \"([^\\\"]|\\.)*\"
+NEWLINE \r?\n
+
+%%
+
+[ \t]+              ;  // 忽略空白符
+
+{NEWLINE}           { return '\n'; }
+
+{STRING}            {
+                      yylval.str = strdup(yytext);
+                      return STRING_LITERAL;
+                    }
+
+{ID}                {
+                      int kw = check_keyword(yytext);
+                      if (kw != 0) return kw;
+                      yylval.str = strdup(yytext);
+                      return IDENTIFIER;
+                    }
+
+"#".*               ;  // 注释：以#开头，整行忽略
+
+.                   { return yytext[0]; }  // 返回单字符 token（如特殊符号）
+
+%%
+
+
+【支持内容】
+关键字识别（open、read、cd 等）
+
+标识符：文件名、路径名等（包括.和/）
+
+字符串：带引号的字符串（如 "hello.txt"）
+
+注释支持：以 # 开头的整行注释
+
+空白符和换行自动跳过
+
+错误容忍：对非法字符直接返回其 ASCII 值，YACC 可进一步处理
