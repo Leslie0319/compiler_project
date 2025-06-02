@@ -1,0 +1,185 @@
+语义分析实现（手工方案 + YACC方案）
+一、语义分析概述
+语义分析阶段位于词法分析与语法分析之后，其主要作用是对通过语法校验的源程序进行上下文相关性检查和具体语义行为执行，确保程序的合法性并逐步构建中间代码或执行实际操作。
+本课程设计的语义分析包括以下目标：
+1.	参数合法性检查：如目录是否存在、文件是否存在、权限格式是否正确。
+2.	多文件协同：如拷贝、移动需要两个参数，均需存在并可访问。
+3.	异常处理机制：例如路径不存在、权限不足、文件冲突等处理。
+4.	权限控制验证：校验 chmod 的权限格式和操作文件是否可修改。
+5.	帮助系统接口：提供动态帮助提示，映射命令到说明文档。
+
+二、主要数据结构
+1. 错误类型定义
+typedef enum {
+    ERR_FILE_NOT_FOUND,
+    ERR_DIR_NOT_FOUND,
+    ERR_PERMISSION_DENIED,
+    ERR_INVALID_ARGUMENT,
+    ERR_UNKNOWN_COMMAND,
+    ERR_SYNTAX,
+    ERR_SEMANTIC
+} ErrorType;
+
+2. 文件系统上下文结构体
+typedef struct {
+    char current_dir[512];  // 当前工作目录
+    int user_permission;    // 模拟当前用户权限（可扩展）
+} FSContext;
+
+3. 命令结构定义（Command IR）
+语义阶段抽象每一条命令为 Command 结构体，便于统一处理：
+typedef struct {
+    char command[16];     // 如：read、write、cd 等
+    char arg1[256];       // 第一个参数（如文件）
+    char arg2[256];       // 第二个参数（如目标路径）
+    char arg3[16];        // 第三个参数（如权限）
+} Command;
+
+三、手工语义分析伪代码
+语义分析通常在语法分析后调用，以下为递归下降后的语义检查及执行伪代码：
+procedure analyze_command(command)
+    switch command.name:
+        case "read":
+            if not file_exists(command.arg1):
+                raise_error(ERR_FILE_NOT_FOUND)
+            else:
+                open_file(command.arg1, "r")
+        case "write":
+            open_file(command.arg1, "w")  // 可不存在
+        case "cd":
+            if not dir_exists(command.arg1):
+                raise_error(ERR_DIR_NOT_FOUND)
+            else:
+                change_dir(command.arg1)
+        case "mkdir":
+            if dir_exists(command.arg1):
+                raise_error(ERR_INVALID_ARGUMENT)
+            else:
+                make_dir(command.arg1)
+        case "rm":
+            if not file_exists(command.arg1):
+                raise_error(ERR_FILE_NOT_FOUND)
+            else:
+                delete_file(command.arg1)
+        case "mv":
+            if not file_exists(command.arg1):
+                raise_error(ERR_FILE_NOT_FOUND)
+            else:
+                move_file(command.arg1, command.arg2)
+        case "cp":
+            if not file_exists(command.arg1):
+                raise_error(ERR_FILE_NOT_FOUND)
+            else:
+                copy_file(command.arg1, command.arg2)
+        case "chmod":
+            if not is_valid_permission(command.arg1):
+                raise_error(ERR_INVALID_ARGUMENT)
+            else if not file_exists(command.arg2):
+                raise_error(ERR_FILE_NOT_FOUND)
+            else:
+                set_permission(command.arg2, command.arg1)
+        case "help":
+            show_help()
+        else:
+            raise_error(ERR_UNKNOWN_COMMAND)
+
+四、手工语义分析核心 C 实现示例
+以 chmod 为例：
+int is_valid_permission(const char *perm) {
+    return strlen(perm) == 3 && perm[0] >= '0' && perm[0] <= '7';
+}
+
+void execute_chmod(Command cmd) {
+    if (!is_valid_permission(cmd.arg1)) {
+        printf("语义错误：权限格式非法！\n");
+        return;
+    }
+    if (access(cmd.arg2, F_OK) != 0) {
+        printf("错误：文件 %s 不存在！\n", cmd.arg2);
+        return;
+    }
+    char cmd_buf[512];
+    sprintf(cmd_buf, "chmod %s %s", cmd.arg1, cmd.arg2);
+    system(cmd_buf);  // 实际执行
+}
+
+五、YACC中语义分析动作设计
+在 YACC 文件中，语义动作在 %% 的规则中体现：
+%union {
+    char* str;
+}
+%token <str> STRING
+%type <str> command
+
+%%
+
+command:
+    READ STRING { 
+        if (!file_exists($2)) {
+            fprintf(stderr, "读取错误：文件不存在：%s\n", $2);
+        } else {
+            printf("读取文件：%s\n", $2);
+        }
+    }
+  | CD STRING {
+        if (!dir_exists($2)) {
+            fprintf(stderr, "路径错误：目录不存在：%s\n", $2);
+        } else {
+            chdir($2);
+        }
+    }
+  | CHMOD STRING STRING {
+        if (!is_valid_permission($2)) {
+            fprintf(stderr, "权限格式错误：%s\n", $2);
+        } else {
+            char cmd[512];
+            sprintf(cmd, "chmod %s %s", $2, $3);
+            system(cmd);
+        }
+    }
+  | HELP {
+        show_help();
+    };
+%%
+注意：所有辅助函数如 file_exists()、dir_exists()、show_help() 等可在辅助 .c 文件中实现。
+
+六、错误检测与语义诊断设计
+为了提高编译器健壮性，语义分析中引入错误处理模块：
+void raise_error(ErrorType err, const char* msg) {
+    switch (err) {
+        case ERR_FILE_NOT_FOUND:
+            printf("语义错误：文件未找到 -> %s\n", msg); break;
+        case ERR_INVALID_ARGUMENT:
+            printf("语义错误：参数非法 -> %s\n", msg); break;
+        ...
+    }
+}
+通过统一接口记录并打印语义错误，确保系统“出错不崩溃”。
+
+七、样例分析输入与行为说明
+正确示例：
+mkdir "test"
+cd "test"
+write "log.txt"
+chmod "755" "log.txt"
+help
+执行结果：
+成功创建 test 目录并进入；
+创建文件 log.txt；
+设置权限；
+显示帮助信息。
+错误示例：
+cd "not_exist"
+chmod "abc" "x.txt"
+rm
+诊断输出：
+路径错误：目录不存在：not_exist
+权限格式错误：abc
+语法错误：rm 缺少参数
+
+八、总结
+本语义分析模块从两个方向实现：
+手工语义分析：结构清晰，便于调试，适合小语言或 DSL。
+YACC 动作语义嵌入：高度集成，结合语法分析规则统一处理，利于构建复杂控制流和代码生成。
+此外，统一的 Command 中间表示（IR）结构以及错误分类体系，为后续可能扩展的中间代码生成或虚拟机解释器留下了良好的接口和设计预留。
+
