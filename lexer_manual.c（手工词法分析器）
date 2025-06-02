@@ -1,2 +1,183 @@
 一、模块功能概述
 本模块负责对用户编写的脚本语言源程序进行词法分析，即识别源程序中的各类单词符号（Token），并将其类型与内容送入语法分析器。该分析器以手工方式使用 C 语言编写，实现了一个有限状态自动机（FSM）结构。
+
+二、支持的Token类型
+Token类型	   说明	             实例
+关键字   	脚本语言支持的命令	 mkdir, cd, ls, write
+字符串	    文件名或写入内容	  "file.txt", "hello"
+数字	     权限数字等	        755, 644
+EOF	        结束标志            	-
+错误符号  	非法字符	            @, #, $
+
+三、主要数据结构设计
+// token类型定义
+typedef enum {
+    TOKEN_MKDIR, TOKEN_CD, TOKEN_LS, TOKEN_TOUCH,
+    TOKEN_WRITE, TOKEN_READ, TOKEN_CP, TOKEN_MV,
+    TOKEN_RM, TOKEN_CHMOD, TOKEN_HELP, TOKEN_EXIT,
+    TOKEN_STRING, TOKEN_NUMBER,
+    TOKEN_EOF, TOKEN_UNKNOWN
+} TokenType;
+
+// Token结构体
+typedef struct {
+    TokenType type;      // 单词类型
+    char lexeme[256];    // 单词内容
+    int line;            // 所在行号
+} Token;
+
+四、词法分析状态转换描述（状态图）
+Start --> 关键字状态（alpha开头）--> TOKEN_xxx
+      --> 字符串状态（"）------------> TOKEN_STRING
+      --> 数字状态（digit）-----------> TOKEN_NUMBER
+      --> 空白符状态（空格/换行）-----> skip
+      --> 其他字符 -------------------> TOKEN_UNKNOWN
+
+五、完整代码实现（lexer_manual.c）
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include "utils.h"
+
+// Token 枚举定义
+typedef enum {
+    TOKEN_MKDIR, TOKEN_CD, TOKEN_LS, TOKEN_TOUCH,
+    TOKEN_WRITE, TOKEN_READ, TOKEN_CP, TOKEN_MV,
+    TOKEN_RM, TOKEN_CHMOD, TOKEN_HELP, TOKEN_EXIT,
+    TOKEN_STRING, TOKEN_NUMBER,
+    TOKEN_EOF, TOKEN_UNKNOWN
+} TokenType;
+
+// Token结构
+typedef struct {
+    TokenType type;
+    char lexeme[256];
+    int line;
+} Token;
+
+// 当前字符与文件指针
+static char currentChar;
+static int currentLine = 1;
+static FILE* inputFile = NULL;
+
+// 初始化词法分析器
+void initLexer(FILE* file) {
+    inputFile = file;
+    currentChar = fgetc(inputFile);
+}
+
+// 前进一个字符
+static void advance() {
+    currentChar = fgetc(inputFile);
+}
+
+// 跳过空白符和注释
+static void skipWhitespace() {
+    while (isspace(currentChar)) {
+        if (currentChar == '\n') currentLine++;
+        advance();
+    }
+}
+
+// 读取字符串内容
+static void readString(char* buffer) {
+    int i = 0;
+    advance(); // skip initial "
+    while (currentChar != '"' && currentChar != EOF) {
+        buffer[i++] = currentChar;
+        advance();
+    }
+    buffer[i] = '\0';
+    if (currentChar == '"') advance(); // skip closing "
+}
+
+// 获取下一个Token
+Token getNextToken() {
+    skipWhitespace();
+    Token token;
+    token.line = currentLine;
+
+    if (currentChar == EOF) {
+        token.type = TOKEN_EOF;
+        strcpy(token.lexeme, "EOF");
+        return token;
+    }
+
+    // 字符串常量
+    if (currentChar == '"') {
+        token.type = TOKEN_STRING;
+        readString(token.lexeme);
+        return token;
+    }
+
+    // 数字串
+    if (isdigit(currentChar)) {
+        int i = 0;
+        while (isdigit(currentChar)) {
+            token.lexeme[i++] = currentChar;
+            advance();
+        }
+        token.lexeme[i] = '\0';
+        token.type = TOKEN_NUMBER;
+        return token;
+    }
+
+    // 关键字识别
+    if (isalpha(currentChar)) {
+        int i = 0;
+        while (isalnum(currentChar)) {
+            token.lexeme[i++] = currentChar;
+            advance();
+        }
+        token.lexeme[i] = '\0';
+
+        if (strcmp(token.lexeme, "mkdir") == 0) token.type = TOKEN_MKDIR;
+        else if (strcmp(token.lexeme, "cd") == 0) token.type = TOKEN_CD;
+        else if (strcmp(token.lexeme, "ls") == 0) token.type = TOKEN_LS;
+        else if (strcmp(token.lexeme, "touch") == 0) token.type = TOKEN_TOUCH;
+        else if (strcmp(token.lexeme, "write") == 0) token.type = TOKEN_WRITE;
+        else if (strcmp(token.lexeme, "read") == 0) token.type = TOKEN_READ;
+        else if (strcmp(token.lexeme, "cp") == 0) token.type = TOKEN_CP;
+        else if (strcmp(token.lexeme, "mv") == 0) token.type = TOKEN_MV;
+        else if (strcmp(token.lexeme, "rm") == 0) token.type = TOKEN_RM;
+        else if (strcmp(token.lexeme, "chmod") == 0) token.type = TOKEN_CHMOD;
+        else if (strcmp(token.lexeme, "help") == 0) token.type = TOKEN_HELP;
+        else if (strcmp(token.lexeme, "exit") == 0) token.type = TOKEN_EXIT;
+        else token.type = TOKEN_UNKNOWN;
+
+        return token;
+    }
+
+    // 错误处理
+    token.lexeme[0] = currentChar;
+    token.lexeme[1] = '\0';
+    token.type = TOKEN_UNKNOWN;
+    advance();
+    return token;
+}
+
+
+六、样例输出说明
+输入脚本：
+mkdir "test"
+cd "test"
+write "file.txt" "hello world"
+chmod 755 "file.txt"
+
+输出Tokens：
+TOKEN_MKDIR, "mkdir"
+TOKEN_STRING, "test"
+TOKEN_CD, "cd"
+TOKEN_STRING, "test"
+TOKEN_WRITE, "write"
+TOKEN_STRING, "file.txt"
+TOKEN_STRING, "hello world"
+TOKEN_CHMOD, "chmod"
+TOKEN_NUMBER, "755"
+TOKEN_STRING, "file.txt"
+
+七、总结与后续说明
+本词法分析器适配设计语言的语法规则，能准确识别关键字、字符串、数字等常见元素。
+保持了错误输入的容错能力，对于非法字符给出 TOKEN_UNKNOWN，便于后续处理。
+可无缝对接语法分析模块（如 parser_manual.c 和 yacc.y）。
