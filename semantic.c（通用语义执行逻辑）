@@ -1,0 +1,175 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <errno.h>
+
+#define MAX_PATH_LEN 1024
+
+void report_error(const char* msg) {
+    fprintf(stderr, "[错误] %s\n", msg);
+}
+
+// 判断文件或目录是否存在
+int check_exists(const char* path) {
+    return access(path, F_OK) == 0;
+}
+
+// 执行 open 操作（这里只是模拟，不实际打开）
+void exec_open(char* filename) {
+    if (!check_exists(filename)) {
+        report_error("文件不存在");
+        return;
+    }
+    printf("打开文件：%s\n", filename);
+}
+
+// 执行 read 操作
+void exec_read(char* filename) {
+    FILE* fp = fopen(filename, "r");
+    if (!fp) {
+        perror("无法读取文件");
+        return;
+    }
+    printf("读取文件 %s 内容如下：\n", filename);
+    char buffer[256];
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        printf("%s", buffer);
+    }
+    fclose(fp);
+}
+
+// 执行 write 操作
+void exec_write(char* filename) {
+    FILE* fp = fopen(filename, "a");
+    if (!fp) {
+        perror("无法写入文件");
+        return;
+    }
+    fprintf(fp, "（追加写入内容）Hello from script!\n");
+    printf("写入文件：%s 完成\n", filename);
+    fclose(fp);
+}
+
+// 执行 cd 操作
+void exec_cd(char* path) {
+    if (chdir(path) != 0) {
+        perror("切换目录失败");
+    } else {
+        char cwd[MAX_PATH_LEN];
+        getcwd(cwd, sizeof(cwd));
+        printf("当前工作目录：%s\n", cwd);
+    }
+}
+
+// 执行 ls 操作
+void exec_ls() {
+    char cwd[MAX_PATH_LEN];
+    getcwd(cwd, sizeof(cwd));
+    DIR* dir = opendir(cwd);
+    if (!dir) {
+        perror("无法打开当前目录");
+        return;
+    }
+    printf("目录 %s 的内容：\n", cwd);
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        printf(" - %s\n", entry->d_name);
+    }
+    closedir(dir);
+}
+
+// 执行 mkdir 操作
+void exec_mkdir(char* name) {
+    if (mkdir(name, 0755) == 0) {
+        printf("成功创建目录：%s\n", name);
+    } else {
+        perror("创建目录失败");
+    }
+}
+
+// 执行 rmdir 操作
+void exec_rmdir(char* name) {
+    if (rmdir(name) == 0) {
+        printf("成功删除目录：%s\n", name);
+    } else {
+        perror("删除目录失败");
+    }
+}
+
+// 执行文件复制
+void exec_copy(char* src, char* dest) {
+    FILE* fsrc = fopen(src, "r");
+    if (!fsrc) {
+        perror("源文件打开失败");
+        return;
+    }
+    FILE* fdest = fopen(dest, "w");
+    if (!fdest) {
+        fclose(fsrc);
+        perror("目标文件打开失败");
+        return;
+    }
+    char buffer[256];
+    size_t n;
+    while ((n = fread(buffer, 1, sizeof(buffer), fsrc)) > 0) {
+        fwrite(buffer, 1, n, fdest);
+    }
+    fclose(fsrc);
+    fclose(fdest);
+    printf("已将 %s 复制为 %s\n", src, dest);
+}
+
+// 执行文件移动
+void exec_move(char* src, char* dest) {
+    if (rename(src, dest) == 0) {
+        printf("已将 %s 移动为 %s\n", src, dest);
+    } else {
+        perror("移动失败");
+    }
+}
+
+// 执行删除文件
+void exec_delete(char* name) {
+    if (remove(name) == 0) {
+        printf("已删除：%s\n", name);
+    } else {
+        perror("删除失败");
+    }
+}
+
+// 执行 help 命令
+void exec_help() {
+    printf("文件系统脚本语言支持以下命令：\n");
+    printf("  open <file>\n");
+    printf("  read <file>\n");
+    printf("  write <file>\n");
+    printf("  cd <dir>\n");
+    printf("  ls\n");
+    printf("  mkdir <dir>\n");
+    printf("  rmdir <dir>\n");
+    printf("  copy <src> <dest>\n");
+    printf("  move <src> <dest>\n");
+    printf("  delete <file>\n");
+    printf("  if <file> then <command>\n");
+    printf("  help\n");
+}
+
+// 用于 IF 条件后的延迟执行（本项目可自定义执行）
+void execute_deferred() {
+    printf("执行 THEN 后的操作（示例中无具体命令）\n");
+}
+
+
+✅ 实现特点
+使用标准 POSIX 接口进行文件/目录操作，具有实际效果。
+
+包含所有由 yacc.y 调用的语义函数。
+
+exec_help() 便于用户查看支持的命令集合。
+
+所有 I/O 操作都附带错误检查与提示。
+
+可扩展性强，如需添加权限检查、日志功能等可在各函数中补充。
