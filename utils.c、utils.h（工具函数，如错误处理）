@@ -1,0 +1,110 @@
+📄 /compiler_project/utils.h
+#ifndef UTILS_H
+#define UTILS_H
+
+#include <stdbool.h>
+
+// 打印错误信息
+void report_error(const char *msg);
+
+// 打印警告信息
+void report_warning(const char *msg);
+
+// 判断路径是否存在
+bool path_exists(const char *path);
+
+// 判断路径是否为目录
+bool is_directory(const char *path);
+
+// 判断路径是否为文件
+bool is_file(const char *path);
+
+// 判断路径是否可读
+bool is_readable(const char *path);
+
+// 判断路径是否可写
+bool is_writable(const char *path);
+
+// 去除字符串末尾换行符
+void trim_newline(char *str);
+
+// 打印调试信息（仅开发阶段使用）
+void debug_log(const char *msg);
+
+#endif
+
+📄 /compiler_project/utils.c
+#include "utils.h"
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <errno.h>
+
+void report_error(const char *msg) {
+    fprintf(stderr, "[错误] %s\n", msg);
+}
+
+void report_warning(const char *msg) {
+    fprintf(stderr, "[警告] %s\n", msg);
+}
+
+bool path_exists(const char *path) {
+    return access(path, F_OK) == 0;
+}
+
+bool is_directory(const char *path) {
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        return false;
+    }
+    return S_ISDIR(st.st_mode);
+}
+
+bool is_file(const char *path) {
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        return false;
+    }
+    return S_ISREG(st.st_mode);
+}
+
+bool is_readable(const char *path) {
+    return access(path, R_OK) == 0;
+}
+
+bool is_writable(const char *path) {
+    return access(path, W_OK) == 0;
+}
+
+void trim_newline(char *str) {
+    if (!str) return;
+    size_t len = strlen(str);
+    if (len > 0 && str[len - 1] == '\n') {
+        str[len - 1] = '\0';
+    }
+}
+
+void debug_log(const char *msg) {
+#ifdef DEBUG
+    fprintf(stderr, "[DEBUG] %s\n", msg);
+#endif
+}
+
+
+✅ 使用说明：
+错误与警告处理：
+
+report_error("文件不存在") 可直接用于提示错误。
+
+report_warning 用于非致命性问题。
+
+路径与文件判断函数：
+
+可用于语义阶段判断路径是否存在或具备权限。
+
+避免重复写 stat() 和 access() 逻辑。
+
+调试日志支持：
+
+编译时加上 -DDEBUG 宏即可启用 debug_log 输出调试信息。
