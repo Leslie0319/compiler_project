@@ -1,0 +1,56 @@
+# 编译器
+CC = gcc
+CFLAGS = -Wall -g
+
+# 目标文件
+MANUAL_OBJS = lexer_manual.c parser_manual.c semantic.c utils.c
+AUTO_OBJS = lex.yy.c y.tab.c semantic.c utils.c
+
+# 输出文件名
+MANUAL_EXEC = compiler_manual
+AUTO_EXEC = compiler_auto
+
+# 默认目标
+all: $(MANUAL_EXEC) $(AUTO_EXEC)
+
+# 手工方案构建规则
+$(MANUAL_EXEC): $(MANUAL_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^
+
+# 自动方案构建规则
+$(AUTO_EXEC): lex.yy.c y.tab.c
+	$(CC) $(CFLAGS) -o $@ $(AUTO_OBJS)
+
+# 使用 lex 和 yacc 生成源文件
+lex.yy.c: lex.l
+	lex lex.l
+
+y.tab.c: yacc.y
+	yacc -d yacc.y
+
+# 清理目标
+clean:
+	rm -f *.o *.out *.exe $(MANUAL_EXEC) $(AUTO_EXEC) lex.yy.c y.tab.* core
+
+# 单独运行手工编译器（测试）
+run_manual: $(MANUAL_EXEC)
+	./$(MANUAL_EXEC) < test/valid_script.txt
+
+# 单独运行自动编译器（测试）
+run_auto: $(AUTO_EXEC)
+	./$(AUTO_EXEC) < test/valid_script.txt
+
+# 提供调试信息（可选）
+debug:
+	$(CC) $(CFLAGS) -DDEBUG -o $(MANUAL_EXEC) $(MANUAL_OBJS)
+
+.PHONY: all clean run_manual run_auto debug
+
+
+✅ 功能说明：
+目标指令                    	功能
+make 或 make all	    构建两种方案的编译器
+make run_manual	      使用 valid_script.txt 运行手工版编译器
+make run_auto	        使用 valid_script.txt 运行自动版编译器
+make clean	          清除所有中间文件和目标程序
+make debug	          用 -DDEBUG 编译手工版（开启调试输出）
