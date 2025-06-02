@@ -1,0 +1,103 @@
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+extern int yylex();
+void yyerror(const char *msg);
+
+#include "semantic.c"  // 引入语义执行模块
+%}
+
+%union {
+    char* str;
+}
+
+%token <str> IDENTIFIER STRING_LITERAL
+%token OPEN READ WRITE
+%token CD LS MKDIR RMDIR
+%token COPY MOVE DELETE
+%token IF THEN HELP
+
+%start program
+
+%%
+
+program:
+      statements
+    ;
+
+statements:
+      statements statement '\n'
+    | statement '\n'
+    ;
+
+statement:
+      file_op
+    | dir_op
+    | logic_op
+    | HELP                 { exec_help(); }
+    ;
+
+file_op:
+      OPEN IDENTIFIER      { exec_open($2); free($2); }
+    | READ IDENTIFIER      { exec_read($2); free($2); }
+    | WRITE IDENTIFIER     { exec_write($2); free($2); }
+    ;
+
+dir_op:
+      CD IDENTIFIER        { exec_cd($2); free($2); }
+    | LS                   { exec_ls(); }
+    | MKDIR IDENTIFIER     { exec_mkdir($2); free($2); }
+    | RMDIR IDENTIFIER     { exec_rmdir($2); free($2); }
+    | COPY IDENTIFIER IDENTIFIER  { exec_copy($2, $3); free($2); free($3); }
+    | MOVE IDENTIFIER IDENTIFIER  { exec_move($2, $3); free($2); free($3); }
+    | DELETE IDENTIFIER    { exec_delete($2); free($2); }
+    ;
+
+logic_op:
+      IF condition THEN statement    { if ($2) execute_deferred(); }
+    ;
+
+condition:
+      IDENTIFIER           { $$ = check_exists($1); free($1); }
+    ;
+
+%%
+
+void yyerror(const char *msg) {
+    fprintf(stderr, "语法错误: %s\n", msg);
+}
+
+
+【支持语法功能包括：】
+文件操作命令：open file.txt、read file.txt、write file.txt
+
+目录操作命令：cd /path、mkdir newdir、rmdir olddir、copy a b、move a b、delete file
+
+逻辑控制：if file.txt then delete file.txt
+
+帮助命令：help
+
+多行程序结构：每条命令以 \n 分隔
+
+错误处理：语法错误通过 yyerror 输出提示
+
+
+【依赖的语义函数（在 semantic.c 中实现）例如：】
+
+void exec_open(char* filename);
+void exec_read(char* filename);
+void exec_write(char* filename);
+void exec_cd(char* path);
+void exec_ls();
+void exec_mkdir(char* name);
+void exec_rmdir(char* name);
+void exec_copy(char* src, char* dest);
+void exec_move(char* src, char* dest);
+void exec_delete(char* name);
+void exec_help();
+int check_exists(char* filename);
+void execute_deferred();  // 用于 THEN 之后的动作
+这些函数可根据 semantic.c 中已有结构补充实现。
+
