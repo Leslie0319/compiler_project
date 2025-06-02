@@ -1,0 +1,340 @@
+报告2：词法分析设计与实现
+一、任务概述
+本词法分析器需识别文件操作脚本语言中的关键字、标识符、字符串字面量、整数、符号和路径等词法单元，并处理空白字符、非法字符、注释等，支持基础错误提示。我们分别采用手工方案（Python）和LEX 自动生成工具实现。
+
+二、主要词法单元设计
+词法单元类别	示例	描述
+关键字	read, write, try	操作指令
+标识符	log, project1	变量或目录命名
+字符串字面量	"text"	文件路径或写入内容
+整数字面量	755, 777	用于权限设置
+符号	=, ,, ;, {}	操作分隔
+空白	空格、换行、Tab	用于分隔词法单元
+错误	非法字符或不闭合字符串	输出错误消息
+
+三、主要数据结构设计（适用于两种方案）
+1. Token 结构体（词法单元结构）
+typedef enum {
+    T_KEYWORD, T_IDENTIFIER, T_STRING, T_INTEGER, T_SYMBOL, T_EOF, T_ERROR
+} TokenType;
+
+typedef struct {
+    TokenType type;
+    char* lexeme;
+    int line;
+    int column;
+} Token;
+
+四、手工词法分析程序实现
+1. 核心流程图（算法）
+ 
+2. 词法分析阶段的完整实现代码，包括：
+①	手工编写的词法分析器（使用 C）
+②	LEX自动生成的词法分析器（.l 文件）
+③	所需的数据结构定义
+④	补充测试样例
+
+3.手工编写词法分析器（C 语言）
+文件结构示例：
+manual_lexer/
+├── lexer.h
+├── lexer.c
+├── token.h
+├── main.c
+
+token.h：Token 类型与结构体定义
+#ifndef TOKEN_H
+#define TOKEN_H
+
+typedef enum {
+    T_KEYWORD,
+    T_IDENTIFIER,
+    T_STRING,
+    T_INTEGER,
+    T_SYMBOL,
+    T_EOF,
+    T_ERROR
+} TokenType;
+
+typedef struct {
+    TokenType type;
+    char* lexeme;
+    int line, column;
+    union {
+        int int_val;
+        char* str_val;
+    } attr;
+} Token;
+
+#endif
+
+lexer.h：词法分析函数声明
+#ifndef LEXER_H
+#define LEXER_H
+
+#include "token.h"
+#include <stdio.h>
+
+void init_lexer(FILE* input);
+Token get_next_token();
+void free_token(Token tok);
+
+#endif
+
+lexer.c：手工实现词法分析器
+#include "lexer.h"
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX_LEXEME_LEN 128
+
+static FILE* in;
+static int line = 1, col = 0;
+static int current_char;
+
+void init_lexer(FILE* input) {
+    in = input;
+    current_char = fgetc(in);
+}
+
+static void advance() {
+    if (current_char == '\n') {
+        line++;
+        col = 0;
+    } else {
+        col++;
+    }
+    current_char = fgetc(in);
+}
+
+static int is_keyword(const char* str) {
+    const char* keywords[] = {
+        "read", "write", "cd", "mkdir", "rm", "cp", "mv", "chmod", "help", NULL
+    };
+    for (int i = 0; keywords[i]; i++) {
+        if (strcmp(str, keywords[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+Token get_next_token() {
+    Token tok;
+    tok.line = line;
+    tok.column = col;
+
+    // Skip whitespace
+    while (isspace(current_char)) advance();
+
+    if (current_char == EOF) {
+        tok.type = T_EOF;
+        tok.lexeme = strdup("EOF");
+        return tok;
+    }
+
+    if (isalpha(current_char) || current_char == '_') {
+        char buffer[MAX_LEXEME_LEN];
+        int len = 0;
+        while (isalnum(current_char) || current_char == '_') {
+            buffer[len++] = current_char;
+            advance();
+        }
+        buffer[len] = '\0';
+        tok.lexeme = strdup(buffer);
+        if (is_keyword(buffer)) {
+            tok.type = T_KEYWORD;
+        } else {
+            tok.type = T_IDENTIFIER;
+        }
+        tok.attr.str_val = strdup(buffer);
+        return tok;
+    }
+
+    if (isdigit(current_char)) {
+        char buffer[MAX_LEXEME_LEN];
+        int len = 0;
+        while (isdigit(current_char)) {
+            buffer[len++] = current_char;
+            advance();
+        }
+        buffer[len] = '\0';
+        tok.type = T_INTEGER;
+        tok.lexeme = strdup(buffer);
+        tok.attr.int_val = atoi(buffer);
+        return tok;
+    }
+
+    if (current_char == '"') {
+        advance();  // skip opening quote
+        char buffer[MAX_LEXEME_LEN];
+        int len = 0;
+        while (current_char != '"' && current_char != EOF) {
+            buffer[len++] = current_char;
+            advance();
+        }
+        buffer[len] = '\0';
+        if (current_char == '"') advance();  // skip closing quote
+        tok.type = T_STRING;
+        tok.lexeme = strdup(buffer);
+        tok.attr.str_val = strdup(buffer);
+        return tok;
+    }
+
+    // Handle symbols
+    char sym[2] = { current_char, '\0' };
+    tok.type = T_SYMBOL;
+    tok.lexeme = strdup(sym);
+    advance();
+    return tok;
+}
+
+void free_token(Token tok) {
+    free(tok.lexeme);
+    if (tok.type == T_IDENTIFIER || tok.type == T_STRING)
+        free(tok.attr.str_val);
+}
+
+main.c：测试词法分析器
+#include "lexer.h"
+#include <stdio.h>
+
+int main() {
+    FILE* fp = fopen("test.txt", "r");
+    if (!fp) {
+        perror("File open failed");
+        return 1;
+    }
+
+    init_lexer(fp);
+    Token tok;
+    do {
+        tok = get_next_token();
+        printf("Token: Type=%d, Lexeme='%s', Line=%d, Col=%d\n",
+               tok.type, tok.lexeme, tok.line, tok.column);
+        free_token(tok);
+    } while (tok.type != T_EOF);
+
+    fclose(fp);
+    return 0;
+}
+
+4.使用 LEX 自动生成词法分析器
+文件结构示例
+lex_lexer/
+├── lexer.l
+├── token.h
+├── main.c
+
+lexer.l：LEX 词法定义文件
+%{
+#include "token.h"
+#include <stdio.h>
+#include <stdlib.h>
+Token yylval;
+%}
+
+%%
+"read"|"write"|"cd"|"mkdir"|"rm"|"cp"|"mv"|"chmod"|"help"  {
+    yylval.type = T_KEYWORD;
+    yylval.lexeme = strdup(yytext);
+    return T_KEYWORD;
+}
+[a-zA-Z_][a-zA-Z0-9_]* {
+    yylval.type = T_IDENTIFIER;
+    yylval.lexeme = strdup(yytext);
+    return T_IDENTIFIER;
+}
+[0-9]+ {
+    yylval.type = T_INTEGER;
+    yylval.lexeme = strdup(yytext);
+    yylval.attr.int_val = atoi(yytext);
+    return T_INTEGER;
+}
+\"([^"])*\" {
+    yylval.type = T_STRING;
+    yylval.lexeme = strdup(yytext);
+    yylval.attr.str_val = strdup(yytext);
+    return T_STRING;
+}
+. {
+    yylval.type = T_SYMBOL;
+    yylval.lexeme = strdup(yytext);
+    return T_SYMBOL;
+}
+[ \t\r\n]+ ;
+%%
+
+int yywrap() { return 1; }
+编译和运行
+flex lexer.l
+gcc lex.yy.c -o lexer -lfl
+./lexer < test.txt
+
+3.测试样例 test.txt（正常与错误）
+read "file1.txt"
+write "output.txt"
+cd /home/user/
+mkdir "newdir"
+rm "old.txt"
+123
+"unterminated string
+wrong#symbol
+
+五、LEX实现词法分析器
+1. LEX代码（lex.l）
+%{
+#include "y.tab.h"
+#include <string.h>
+%}
+
+%%
+[ \t\n\r]+              ;  // 忽略空白
+"read"                 { return READ; }
+"write"                { return WRITE; }
+"cd"                   { return CD; }
+"ls"                   { return LS; }
+"mkdir"                { return MKDIR; }
+"rmdir"                { return RMDIR; }
+"rename"               { return RENAME; }
+"copy"                 { return COPY; }
+"move"                 { return MOVE; }
+"delete"               { return DELETE; }
+"try"                  { return TRY; }
+"catch"                { return CATCH; }
+"end"                  { return END; }
+"help"                 { return HELP; }
+
+[0-9]+                 { yylval.ival = atoi(yytext); return INTEGER; }
+\"([^\\\"]|\\.)*\"     { yylval.str = strdup(yytext); return STRING; }
+[a-zA-Z_][a-zA-Z0-9_]* { yylval.str = strdup(yytext); return IDENTIFIER; }
+"="|";"|","|"{"|"}"    { return yytext[0]; }
+
+.                      { printf("非法字符: %s\n", yytext); return ERROR; }
+%%
+
+int yywrap() { return 1; }
+
+2. 配套 y.tab.h 示例（可与YACC语法分析配合）
+#define READ      256
+#define WRITE     257
+#define CD        258
+#define LS        259
+#define MKDIR     260
+#define RMDIR     261
+#define RENAME    262
+#define COPY      263
+#define MOVE      264
+#define DELETE    265
+#define TRY       266
+#define CATCH     267
+#define END       268
+#define HELP      269
+#define IDENTIFIER 270
+#define STRING     271
+#define INTEGER    272
+#define ERROR      273
+
+六、词法状态图（识别关键字、标识符、数字、字符串）
+简略图如下：
+ 
